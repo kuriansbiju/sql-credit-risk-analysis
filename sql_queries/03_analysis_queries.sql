@@ -186,8 +186,95 @@ GROUP BY verification_status
 ORDER BY verification_status;
 
 
+-- Default rate by issue year
+-- Finding: 2007 high (~26.2%), falls to ~13.7% by 2009, then rises from
+-- ~15.6% (2013) to ~24.3% (2016). 2017-2018 are NOT reliable: only ~36%
+-- and ~10% of those loans are resolved, so only quick outcomes are counted
+-- and the default rate is biased low (censoring). Loans before 2016 are
+-- mature enough to compare.
+SELECT
+    EXTRACT(YEAR FROM issue_d) AS issue_year,
+    ROUND(AVG(
+        CASE
+            WHEN loan_status IN ('Charged Off', 'Default', 'Does not meet the credit policy. Status:Charged Off') THEN 1
+            WHEN loan_status IN ('Fully Paid', 'Does not meet the credit policy. Status:Fully Paid') THEN 0
+            ELSE NULL
+        END
+    ), 4) AS default_by_year,
+    COUNT(*) AS num_loans,
+    COUNT(
+        CASE
+            WHEN loan_status IN ('Charged Off', 'Default', 'Does not meet the credit policy. Status:Charged Off') THEN 1
+            WHEN loan_status IN ('Fully Paid', 'Does not meet the credit policy. Status:Fully Paid') THEN 0
+            ELSE NULL
+        END
+    ) AS num_resolved
+FROM loans
+GROUP BY issue_year
+ORDER BY issue_year;
+
+-- Default rate by verification status, mature loans only (issued before 2016)
+-- Finding: Not Verified ~13.5%, Source Verified ~19.9%, Verified ~21.3%.
+-- The Verified vs Not Verified gap shrinks from ~9.2 points (all loans) to
+-- ~7.8 points, so differing loan ages explain only a small part of it.
+SELECT
+    verification_status,
+    ROUND(AVG(
+        CASE
+            WHEN loan_status IN ('Charged Off', 'Default', 'Does not meet the credit policy. Status:Charged Off') THEN 1
+            WHEN loan_status IN ('Fully Paid', 'Does not meet the credit policy. Status:Fully Paid') THEN 0
+            ELSE NULL
+        END
+    ), 4) AS default_rate,
+    COUNT(*) AS num_loans,
+    COUNT(
+        CASE
+            WHEN loan_status IN ('Charged Off', 'Default', 'Does not meet the credit policy. Status:Charged Off') THEN 1
+            WHEN loan_status IN ('Fully Paid', 'Does not meet the credit policy. Status:Fully Paid') THEN 0
+            ELSE NULL
+        END
+    ) AS num_resolved
+FROM loans
+WHERE issue_d < '2016-01-01'
+GROUP BY verification_status
+ORDER BY verification_status;
+
+-- Default rate by grade AND verification status (multi-column GROUP BY),
+-- mature loans only. One row per grade/verification pair (21 rows).
+-- Finding: grade is a confounder. Not Verified loans are concentrated in
+-- good grades (~26% grade A vs ~11% for Verified; grades D-G ~15% vs ~35%).
+-- Within each grade the Verified minus Not Verified gap is much smaller than
+-- the raw 7.8 points at low grades (A ~0.9, B ~1.5, C ~2.4, D ~4.0), though
+-- it stays positive in every grade and widens for worse grades (E ~5.8,
+-- F ~8.2, G ~9.3; F and G Not Verified groups are small). Averaged across
+-- grades the gap is roughly 3 points, so grade explains about 60% of the raw
+-- gap, but not all of it.
+SELECT
+    verification_status,
+    grade,
+    ROUND(AVG(
+        CASE
+            WHEN loan_status IN ('Charged Off', 'Default', 'Does not meet the credit policy. Status:Charged Off') THEN 1
+            WHEN loan_status IN ('Fully Paid', 'Does not meet the credit policy. Status:Fully Paid') THEN 0
+            ELSE NULL
+        END
+    ), 4) AS default_rate,
+    COUNT(*) AS num_loans,
+    COUNT(
+        CASE
+            WHEN loan_status IN ('Charged Off', 'Default', 'Does not meet the credit policy. Status:Charged Off') THEN 1
+            WHEN loan_status IN ('Fully Paid', 'Does not meet the credit policy. Status:Fully Paid') THEN 0
+            ELSE NULL
+        END
+    ) AS num_resolved
+FROM loans
+WHERE issue_d < '2016-01-01'
+GROUP BY grade, verification_status
+ORDER BY grade, verification_status;
+
+
 -- ------------------------------------------------------------
--- TO ADD (remaining Phase 4 queries)
+-- NEXT: Phase 5 (Python + logistic regression PD model)
+-- Training data should use mature vintages only (issued before 2016),
+-- because recent loans are mostly unresolved and biased toward quick outcomes.
 -- ------------------------------------------------------------
--- 1. Default rate and volume by issue year (EXTRACT(YEAR FROM issue_d))
--- 2. Multi-column breakdown (e.g. grade and home_ownership together)
