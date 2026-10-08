@@ -1,0 +1,215 @@
+-- ============================================================
+-- 01_create_tables.sql
+-- Schema for the Lending Club credit risk project (PostgreSQL)
+--
+-- Tables:
+--   staging_loans : raw landing table, all columns TEXT, no constraints
+--   customers     : one row per loan application (surrogate key)
+--   loans         : one row per loan application, linked to customers
+--
+-- Design notes:
+--   * Values re-measured at each application (income, dti, delinquencies,
+--     employment) live in loans. Only slow-changing fields stay in customers.
+--   * The public Kaggle version of this dataset has id and member_id
+--     entirely NULL, so neither can be a primary key. Both clean tables use
+--     SERIAL surrogate keys instead, linked via a row number (rn) added to
+--     staging_loans (see 02_load_data.sql).
+--   * The raw column "desc" is a reserved word, so it is renamed loan_desc.
+--
+-- Run order: staging_loans, customers, then loans
+-- (loans has a foreign key to customers, so customers must exist first).
+-- ============================================================
+
+-- To rebuild from scratch, uncomment (drops in dependency order):
+-- DROP TABLE IF EXISTS loans;
+-- DROP TABLE IF EXISTS customers;
+-- DROP TABLE IF EXISTS staging_loans;
+
+
+-- ------------------------------------------------------------
+-- Staging table: catches the raw CSV with no type or key enforcement.
+-- Everything is TEXT so a single malformed value cannot abort the import.
+-- ------------------------------------------------------------
+CREATE TABLE staging_loans (
+    id TEXT,
+    member_id TEXT,
+    loan_amnt TEXT,
+    funded_amnt TEXT,
+    funded_amnt_inv TEXT,
+    term TEXT,
+    int_rate TEXT,
+    installment TEXT,
+    grade TEXT,
+    sub_grade TEXT,
+    emp_title TEXT,
+    emp_length TEXT,
+    home_ownership TEXT,
+    annual_inc TEXT,
+    verification_status TEXT,
+    issue_d TEXT,
+    loan_status TEXT,
+    pymnt_plan TEXT,
+    url TEXT,
+    loan_desc TEXT,
+    purpose TEXT,
+    title TEXT,
+    zip_code TEXT,
+    addr_state TEXT,
+    dti TEXT,
+    delinq_2yrs TEXT,
+    earliest_cr_line TEXT,
+    inq_last_6mths TEXT,
+    mths_since_last_delinq TEXT,
+    mths_since_last_record TEXT,
+    open_acc TEXT,
+    pub_rec TEXT,
+    revol_bal TEXT,
+    revol_util TEXT,
+    total_acc TEXT,
+    initial_list_status TEXT,
+    out_prncp TEXT,
+    out_prncp_inv TEXT,
+    total_pymnt TEXT,
+    total_pymnt_inv TEXT,
+    total_rec_prncp TEXT,
+    total_rec_int TEXT,
+    total_rec_late_fee TEXT,
+    recoveries TEXT,
+    collection_recovery_fee TEXT,
+    last_pymnt_d TEXT,
+    last_pymnt_amnt TEXT,
+    next_pymnt_d TEXT,
+    last_credit_pull_d TEXT,
+    collections_12_mths_ex_med TEXT,
+    mths_since_last_major_derog TEXT,
+    policy_code TEXT,
+    application_type TEXT,
+    annual_inc_joint TEXT,
+    dti_joint TEXT,
+    verification_status_joint TEXT,
+    acc_now_delinq TEXT,
+    tot_coll_amt TEXT,
+    tot_cur_bal TEXT,
+    open_acc_6m TEXT,
+    open_act_il TEXT,
+    open_il_12m TEXT,
+    open_il_24m TEXT,
+    mths_since_rcnt_il TEXT,
+    total_bal_il TEXT,
+    il_util TEXT,
+    open_rv_12m TEXT,
+    open_rv_24m TEXT,
+    max_bal_bc TEXT,
+    all_util TEXT,
+    total_rev_hi_lim TEXT,
+    inq_fi TEXT,
+    total_cu_tl TEXT,
+    inq_last_12m TEXT,
+    acc_open_past_24mths TEXT,
+    avg_cur_bal TEXT,
+    bc_open_to_buy TEXT,
+    bc_util TEXT,
+    chargeoff_within_12_mths TEXT,
+    delinq_amnt TEXT,
+    mo_sin_old_il_acct TEXT,
+    mo_sin_old_rev_tl_op TEXT,
+    mo_sin_rcnt_rev_tl_op TEXT,
+    mo_sin_rcnt_tl TEXT,
+    mort_acc TEXT,
+    mths_since_recent_bc TEXT,
+    mths_since_recent_bc_dlq TEXT,
+    mths_since_recent_inq TEXT,
+    mths_since_recent_revol_delinq TEXT,
+    num_accts_ever_120_pd TEXT,
+    num_actv_bc_tl TEXT,
+    num_actv_rev_tl TEXT,
+    num_bc_sats TEXT,
+    num_bc_tl TEXT,
+    num_il_tl TEXT,
+    num_op_rev_tl TEXT,
+    num_rev_accts TEXT,
+    num_rev_tl_bal_gt_0 TEXT,
+    num_sats TEXT,
+    num_tl_120dpd_2m TEXT,
+    num_tl_30dpd TEXT,
+    num_tl_90g_dpd_24m TEXT,
+    num_tl_op_past_12m TEXT,
+    pct_tl_nvr_dlq TEXT,
+    percent_bc_gt_75 TEXT,
+    pub_rec_bankruptcies TEXT,
+    tax_liens TEXT,
+    tot_hi_cred_lim TEXT,
+    total_bal_ex_mort TEXT,
+    total_bc_limit TEXT,
+    total_il_high_credit_limit TEXT,
+    revol_bal_joint TEXT,
+    sec_app_earliest_cr_line TEXT,
+    sec_app_inq_last_6mths TEXT,
+    sec_app_mort_acc TEXT,
+    sec_app_open_acc TEXT,
+    sec_app_revol_util TEXT,
+    sec_app_open_act_il TEXT,
+    sec_app_num_rev_accts TEXT,
+    sec_app_chargeoff_within_12_mths TEXT,
+    sec_app_collections_12_mths_ex_med TEXT,
+    sec_app_mths_since_last_major_derog TEXT,
+    hardship_flag TEXT,
+    hardship_type TEXT,
+    hardship_reason TEXT,
+    hardship_status TEXT,
+    deferral_term TEXT,
+    hardship_amount TEXT,
+    hardship_start_date TEXT,
+    hardship_end_date TEXT,
+    payment_plan_start_date TEXT,
+    hardship_length TEXT,
+    hardship_dpd TEXT,
+    hardship_loan_status TEXT,
+    orig_projected_additional_accrued_interest TEXT,
+    hardship_payoff_balance_amount TEXT,
+    hardship_last_payment_amount TEXT,
+    disbursement_method TEXT,
+    debt_settlement_flag TEXT,
+    debt_settlement_flag_date TEXT,
+    settlement_status TEXT,
+    settlement_date TEXT,
+    settlement_amount TEXT,
+    settlement_percentage TEXT,
+    settlement_term TEXT
+);
+
+
+-- ------------------------------------------------------------
+-- customers: one row per loan application.
+-- customer_id is a surrogate key (see design notes above).
+-- ------------------------------------------------------------
+CREATE TABLE customers (
+    customer_id    SERIAL PRIMARY KEY,
+    home_ownership VARCHAR(20),
+    zip_code       VARCHAR(10),   -- text, not integer: values like '820xx', never used for arithmetic
+    addr_state     VARCHAR(2)
+);
+
+
+-- ------------------------------------------------------------
+-- loans: one row per loan application.
+-- customer_id is a foreign key to customers.
+-- ------------------------------------------------------------
+CREATE TABLE loans (
+    loan_id              SERIAL PRIMARY KEY,
+    customer_id          INTEGER REFERENCES customers(customer_id),
+    loan_amnt            DECIMAL,
+    term                 TEXT,          -- values like ' 36 months' (not a clean number)
+    int_rate             DECIMAL,
+    grade                VARCHAR(1),    -- A (lowest risk) to G (highest risk)
+    sub_grade            VARCHAR(2),    -- A1 to G5
+    purpose              TEXT,
+    issue_d              DATE,
+    loan_status          TEXT,          -- long values, e.g. 'Does not meet the credit policy. Status:Fully Paid'
+    dti                  DECIMAL,
+    delinq_2yrs          INTEGER,
+    annual_inc           DECIMAL,
+    verification_status  TEXT,
+    emp_title            TEXT,
+    emp_length           VARCHAR(20)    -- values like '10+ years', '< 1 year'
+);
